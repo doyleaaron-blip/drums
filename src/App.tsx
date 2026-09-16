@@ -331,10 +331,10 @@ export function App() {
         </div>
 
         {/* View Tabs Bar */}
-        <div className="flex items-center justify-center sm:justify-start gap-2 border-b border-zinc-800 pb-2">
+        <div className="flex items-center overflow-x-auto max-w-full scrollbar-none gap-2 border-b border-zinc-800 pb-2 px-1">
           <button
             onClick={() => setActiveTab('sequencer')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider whitespace-nowrap flex-shrink-0 transition-all ${
               activeTab === 'sequencer'
                 ? 'bg-zinc-800 text-white shadow ring-1 ring-zinc-700'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -346,7 +346,7 @@ export function App() {
 
           <button
             onClick={() => setActiveTab('pads')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider whitespace-nowrap flex-shrink-0 transition-all ${
               activeTab === 'pads'
                 ? 'bg-zinc-800 text-white shadow ring-1 ring-zinc-700'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -358,7 +358,7 @@ export function App() {
 
           <button
             onClick={() => setActiveTab('synth')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider whitespace-nowrap flex-shrink-0 transition-all ${
               activeTab === 'synth'
                 ? 'bg-zinc-800 text-white shadow ring-1 ring-zinc-700'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
@@ -370,7 +370,7 @@ export function App() {
 
           <button
             onClick={() => setActiveTab('master')}
-            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs uppercase tracking-wider whitespace-nowrap flex-shrink-0 transition-all ${
               activeTab === 'master'
                 ? 'bg-zinc-800 text-white shadow ring-1 ring-zinc-700'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900'
