@@ -73,12 +73,23 @@ export class SynthEngine {
       const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
       this.ctx = new AudioCtx();
 
-      // State change listener for mobile device lock/unlock cycle
+      // iOS Safari state change listener
       this.ctx.onstatechange = () => {
         if (this.ctx && this.ctx.state === 'suspended') {
           this.ensureUnlocked();
         }
       };
+
+      // iOS Safari first-touch unlock listener
+      if (typeof window !== 'undefined') {
+        const unlock = () => {
+          this.ensureUnlocked();
+          window.removeEventListener('pointerdown', unlock);
+          window.removeEventListener('touchstart', unlock);
+        };
+        window.addEventListener('pointerdown', unlock, { passive: true });
+        window.addEventListener('touchstart', unlock, { passive: true });
+      }
 
       this.noiseBuffer = createNoiseBuffer(this.ctx);
       this.reverbImpulse = createReverbImpulse(this.ctx);
