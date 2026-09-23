@@ -21,79 +21,87 @@ export const Oscilloscope: React.FC<OscilloscopeProps> = ({
     if (!ctx) return;
 
     const draw = () => {
-      animFrameRef.current = requestAnimationFrame(draw);
+      try {
+        const width = canvas.width;
+        const height = canvas.height;
 
-      const width = canvas.width;
-      const height = canvas.height;
+        // Dark CRT cathode background
+        ctx.fillStyle = '#09090b';
+        ctx.fillRect(0, 0, width, height);
 
-      // Dark CRT cathode background
-      ctx.fillStyle = '#09090b';
-      ctx.fillRect(0, 0, width, height);
+        // CRT Grid overlay
+        ctx.strokeStyle = '#18181b';
+        ctx.lineWidth = 1;
+        const gridX = width / 8;
+        const gridY = height / 4;
 
-      // CRT Grid overlay
-      ctx.strokeStyle = '#18181b';
-      ctx.lineWidth = 1;
-      const gridX = width / 8;
-      const gridY = height / 4;
-
-      for (let x = gridX; x < width; x += gridX) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, height);
-        ctx.stroke();
-      }
-      for (let y = gridY; y < height; y += gridY) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(width, y);
-        ctx.stroke();
-      }
-
-      const analyser = synthEngine.analyserNode;
-      if (!analyser || !isPlaying) {
-        // Flat horizontal line with slight analog noise bloom
-        ctx.beginPath();
-        ctx.strokeStyle = kitColor;
-        ctx.lineWidth = 2;
-        ctx.shadowColor = kitColor;
-        ctx.shadowBlur = 8;
-        ctx.moveTo(0, height / 2);
-        ctx.lineTo(width, height / 2);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        return;
-      }
-
-      const bufferLength = analyser.frequencyBinCount;
-      const dataArray = new Uint8Array(bufferLength);
-      analyser.getByteTimeDomainData(dataArray);
-
-      // Draw Waveform Line
-      ctx.lineWidth = 2.5;
-      ctx.strokeStyle = kitColor;
-      ctx.shadowColor = kitColor;
-      ctx.shadowBlur = 10;
-      ctx.beginPath();
-
-      const sliceWidth = (width * 1.0) / bufferLength;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 128.0;
-        const y = (v * height) / 2;
-
-        if (i === 0) {
-          ctx.moveTo(x, y);
-        } else {
-          ctx.lineTo(x, y);
+        for (let x = gridX; x < width; x += gridX) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, height);
+          ctx.stroke();
+        }
+        for (let y = gridY; y < height; y += gridY) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(width, y);
+          ctx.stroke();
         }
 
-        x += sliceWidth;
+        const analyser = synthEngine.analyserNode;
+        if (!analyser || !isPlaying) {
+          // Flat horizontal line with slight analog noise bloom
+          ctx.beginPath();
+          ctx.strokeStyle = kitColor;
+          ctx.lineWidth = 2;
+          ctx.shadowColor = kitColor;
+          ctx.shadowBlur = 8;
+          ctx.moveTo(0, height / 2);
+          ctx.lineTo(width, height / 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+          
+          animFrameRef.current = requestAnimationFrame(draw);
+          return;
+        }
+
+        const bufferLength = analyser.frequencyBinCount;
+        if (bufferLength > 0) {
+          const dataArray = new Uint8Array(bufferLength);
+          analyser.getByteTimeDomainData(dataArray);
+
+          // Draw Waveform Line
+          ctx.lineWidth = 2.5;
+          ctx.strokeStyle = kitColor;
+          ctx.shadowColor = kitColor;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+
+          const sliceWidth = (width * 1.0) / bufferLength;
+          let x = 0;
+
+          for (let i = 0; i < bufferLength; i++) {
+            const v = dataArray[i] / 128.0;
+            const y = (v * height) / 2;
+
+            if (i === 0) {
+              ctx.moveTo(x, y);
+            } else {
+              ctx.lineTo(x, y);
+            }
+
+            x += sliceWidth;
+          }
+
+          ctx.lineTo(width, height / 2);
+          ctx.stroke();
+          ctx.shadowBlur = 0;
+        }
+      } catch (e) {
+        // Catch any canvas or analyser disconnect exceptions safely
       }
 
-      ctx.lineTo(width, height / 2);
-      ctx.stroke();
-      ctx.shadowBlur = 0;
+      animFrameRef.current = requestAnimationFrame(draw);
     };
 
     draw();

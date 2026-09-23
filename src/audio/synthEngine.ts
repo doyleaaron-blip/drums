@@ -69,72 +69,83 @@ export class SynthEngine {
 
   public init() {
     if (this.ctx) return;
-    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    this.ctx = new AudioCtx();
+    try {
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      this.ctx = new AudioCtx();
 
-    this.noiseBuffer = createNoiseBuffer(this.ctx);
-    this.reverbImpulse = createReverbImpulse(this.ctx);
+      // State change listener for mobile device lock/unlock cycle
+      this.ctx.onstatechange = () => {
+        if (this.ctx && this.ctx.state === 'suspended') {
+          this.ensureUnlocked();
+        }
+      };
 
-    // Build Master FX Chain
-    this.masterGain = this.ctx.createGain();
-    this.masterDrive = this.ctx.createWaveShaper();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.masterDrive.curve = makeDistortionCurve(10) as any;
-    this.masterDrive.oversample = '4x';
+      this.noiseBuffer = createNoiseBuffer(this.ctx);
+      this.reverbImpulse = createReverbImpulse(this.ctx);
 
-    this.masterFilter = this.ctx.createBiquadFilter();
-    this.masterFilter.type = 'lowpass';
-    this.masterFilter.frequency.value = 18000;
+      // Build Master FX Chain
+      this.masterGain = this.ctx.createGain();
+      this.masterDrive = this.ctx.createWaveShaper();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.masterDrive.curve = makeDistortionCurve(10) as any;
+      this.masterDrive.oversample = '4x';
 
-    this.masterCompressor = this.ctx.createDynamicsCompressor();
-    this.masterCompressor.threshold.value = -12;
-    this.masterCompressor.knee.value = 10;
-    this.masterCompressor.ratio.value = 4;
-    this.masterCompressor.attack.value = 0.005;
-    this.masterCompressor.release.value = 0.1;
+      this.masterFilter = this.ctx.createBiquadFilter();
+      this.masterFilter.type = 'lowpass';
+      this.masterFilter.frequency.value = 18000;
 
-    // Delay Network
-    this.delayNode = this.ctx.createDelay(1.0);
-    this.delayNode.delayTime.value = 0.25;
-    this.delayFeedbackGain = this.ctx.createGain();
-    this.delayFeedbackGain.gain.value = 0.3;
-    this.delayDryGain = this.ctx.createGain();
-    this.delayWetGain = this.ctx.createGain();
-    this.delayWetGain.gain.value = 0.0;
+      this.masterCompressor = this.ctx.createDynamicsCompressor();
+      this.masterCompressor.threshold.value = -12;
+      this.masterCompressor.knee.value = 10;
+      this.masterCompressor.ratio.value = 4;
+      this.masterCompressor.attack.value = 0.005;
+      this.masterCompressor.release.value = 0.1;
 
-    this.delayNode.connect(this.delayFeedbackGain);
-    this.delayFeedbackGain.connect(this.delayNode);
+      // Delay Network
+      this.delayNode = this.ctx.createDelay(1.0);
+      this.delayNode.delayTime.value = 0.25;
+      this.delayFeedbackGain = this.ctx.createGain();
+      this.delayFeedbackGain.gain.value = 0.3;
+      this.delayDryGain = this.ctx.createGain();
+      this.delayWetGain = this.ctx.createGain();
+      this.delayWetGain.gain.value = 0.0;
 
-    // Reverb Network
-    this.reverbNode = this.ctx.createConvolver();
-    this.reverbNode.buffer = this.reverbImpulse;
-    this.reverbWetGain = this.ctx.createGain();
-    this.reverbWetGain.gain.value = 0.1;
+      this.delayNode.connect(this.delayFeedbackGain);
+      this.delayFeedbackGain.connect(this.delayNode);
 
-    // Analyser
-    this.analyserNode = this.ctx.createAnalyser();
-    this.analyserNode.fftSize = 2048;
+      // Reverb Network
+      this.reverbNode = this.ctx.createConvolver();
+      this.reverbNode.buffer = this.reverbImpulse;
+      this.reverbWetGain = this.ctx.createGain();
+      this.reverbWetGain.gain.value = 0.1;
 
-    // Routing:
-    // Voices -> masterGain -> masterDrive -> masterFilter -> masterCompressor -> [Dry + Delay + Reverb] -> analyserNode -> destination
-    this.masterGain.connect(this.masterDrive);
-    this.masterDrive.connect(this.masterFilter);
-    this.masterFilter.connect(this.masterCompressor);
+      // Analyser
+      this.analyserNode = this.ctx.createAnalyser();
+      this.analyserNode.fftSize = 2048;
 
-    // Split to Dry, Delay, Reverb
-    this.masterCompressor.connect(this.delayDryGain);
-    this.masterCompressor.connect(this.delayNode);
-    this.delayNode.connect(this.delayWetGain);
+      // Routing:
+      // Voices -> masterGain -> masterDrive -> masterFilter -> masterCompressor -> [Dry + Delay + Reverb] -> analyserNode -> destination
+      this.masterGain.connect(this.masterDrive);
+      this.masterDrive.connect(this.masterFilter);
+      this.masterFilter.connect(this.masterCompressor);
 
-    this.masterCompressor.connect(this.reverbNode);
-    this.reverbNode.connect(this.reverbWetGain);
+      // Split to Dry, Delay, Reverb
+      this.masterCompressor.connect(this.delayDryGain);
+      this.masterCompressor.connect(this.delayNode);
+      this.delayNode.connect(this.delayWetGain);
 
-    // Sum outputs
-    this.delayDryGain.connect(this.analyserNode);
-    this.delayWetGain.connect(this.analyserNode);
-    this.reverbWetGain.connect(this.analyserNode);
+      this.masterCompressor.connect(this.reverbNode);
+      this.reverbNode.connect(this.reverbWetGain);
 
-    this.analyserNode.connect(this.ctx.destination);
+      // Sum outputs
+      this.delayDryGain.connect(this.analyserNode);
+      this.delayWetGain.connect(this.analyserNode);
+      this.reverbWetGain.connect(this.analyserNode);
+
+      this.analyserNode.connect(this.ctx.destination);
+    } catch (err) {
+      console.error('Failed to initialize AudioContext:', err);
+    }
   }
 
   public getAudioContext(): AudioContext {
@@ -144,36 +155,44 @@ export class SynthEngine {
 
   public ensureUnlocked() {
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      try {
+        this.ctx.resume().catch((err) => console.warn('AudioContext resume deferred:', err));
+      } catch (e) {
+        // ignore
+      }
     }
   }
 
   public updateMasterFX(params: MasterFXParams) {
     if (!this.ctx || !this.masterDrive || !this.masterFilter || !this.delayNode || !this.delayWetGain || !this.reverbWetGain || !this.masterCompressor || !this.delayFeedbackGain) return;
 
-    const time = this.ctx.currentTime;
-    
-    // Master Drive
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    this.masterDrive.curve = makeDistortionCurve(params.drive * 0.8) as any;
+    try {
+      const time = this.ctx.currentTime;
+      
+      // Master Drive
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      this.masterDrive.curve = makeDistortionCurve(params.drive * 0.8) as any;
 
-    // Filter Cutoff & Res
-    this.masterFilter.frequency.setTargetAtTime(Math.max(40, params.filterCutoff), time, 0.02);
-    this.masterFilter.Q.setTargetAtTime((params.filterRes / 100) * 15, time, 0.02);
+      // Filter Cutoff & Res
+      this.masterFilter.frequency.setTargetAtTime(Math.max(40, params.filterCutoff), time, 0.02);
+      this.masterFilter.Q.setTargetAtTime((params.filterRes / 100) * 15, time, 0.02);
 
-    // Delay
-    const maxDelay = 0.75;
-    const calculatedDelayTime = Math.max(0.05, (params.delayTime / 100) * maxDelay);
-    this.delayNode.delayTime.setTargetAtTime(calculatedDelayTime, time, 0.02);
-    this.delayFeedbackGain.gain.setTargetAtTime((params.delayFeedback / 100) * 0.75, time, 0.02);
-    this.delayWetGain.gain.setTargetAtTime((params.delayTime > 0 ? (params.delayFeedback / 100) * 0.5 : 0), time, 0.02);
+      // Delay
+      const maxDelay = 0.75;
+      const calculatedDelayTime = Math.max(0.05, (params.delayTime / 100) * maxDelay);
+      this.delayNode.delayTime.setTargetAtTime(calculatedDelayTime, time, 0.02);
+      this.delayFeedbackGain.gain.setTargetAtTime((params.delayFeedback / 100) * 0.75, time, 0.02);
+      this.delayWetGain.gain.setTargetAtTime((params.delayTime > 0 ? (params.delayFeedback / 100) * 0.5 : 0), time, 0.02);
 
-    // Reverb
-    this.reverbWetGain.gain.setTargetAtTime((params.reverbMix / 100) * 0.6, time, 0.02);
+      // Reverb
+      this.reverbWetGain.gain.setTargetAtTime((params.reverbMix / 100) * 0.6, time, 0.02);
 
-    // Compressor
-    const compThresh = -40 + (1 - params.compThreshold / 100) * 36;
-    this.masterCompressor.threshold.setTargetAtTime(compThresh, time, 0.02);
+      // Compressor
+      const compThresh = -40 + (1 - params.compThreshold / 100) * 36;
+      this.masterCompressor.threshold.setTargetAtTime(compThresh, time, 0.02);
+    } catch (e) {
+      console.warn('Master FX update exception:', e);
+    }
   }
 
   public triggerVoice(
@@ -184,103 +203,111 @@ export class SynthEngine {
     accent = false,
     flamCount = 0
   ) {
-    if (!this.ctx) this.init();
-    const ctx = this.ctx!;
-    this.ensureUnlocked();
+    try {
+      if (!this.ctx) this.init();
+      const ctx = this.ctx!;
+      this.ensureUnlocked();
 
-    const startTime = time ?? ctx.currentTime;
-    const gainFactor = velocity * (accent ? 1.4 : 1.0);
+      const startTime = time ?? ctx.currentTime;
+      const gainFactor = velocity * (accent ? 1.4 : 1.0);
 
-    // Flam/Ratchet multi-hit trigger burst support
-    if (flamCount > 0) {
-      const burstDelay = 0.045; // 45ms ratchet
-      for (let i = 0; i <= flamCount; i++) {
-        const subTime = startTime + i * burstDelay;
-        const subVol = velocity * (1 - i * 0.2) * (accent ? 1.4 : 1.0);
-        this.synthesizeVoice(voiceId, params, subTime, subVol);
+      // Flam/Ratchet multi-hit trigger burst support
+      if (flamCount > 0) {
+        const burstDelay = 0.045; // 45ms ratchet
+        for (let i = 0; i <= flamCount; i++) {
+          const subTime = startTime + i * burstDelay;
+          const subVol = velocity * (1 - i * 0.2) * (accent ? 1.4 : 1.0);
+          this.synthesizeVoice(voiceId, params, subTime, subVol);
+        }
+        return;
       }
-      return;
-    }
 
-    this.synthesizeVoice(voiceId, params, startTime, gainFactor);
+      this.synthesizeVoice(voiceId, params, startTime, gainFactor);
+    } catch (err) {
+      console.warn('Trigger voice exception:', err);
+    }
   }
 
   private synthesizeVoice(voiceId: VoiceId, params: VoiceParams, startTime: number, gainFactor: number) {
     const ctx = this.ctx!;
     if (!this.masterGain) return;
 
-    // Choke Open Hat if Closed Hat triggers
-    if (voiceId === 'closedHat' && this.activeOpenHatGain) {
-      try {
-        this.activeOpenHatGain.gain.setTargetAtTime(0, startTime, 0.01);
-      } catch (e) {
-        // ignore timing exceptions
+    try {
+      // Choke Open Hat if Closed Hat triggers
+      if (voiceId === 'closedHat' && this.activeOpenHatGain) {
+        try {
+          this.activeOpenHatGain.gain.setTargetAtTime(0, startTime, 0.01);
+        } catch (e) {
+          // ignore timing exceptions
+        }
       }
-    }
 
-    // Voice Panner & Gain Node
-    const panner = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
-    if (panner) {
-      panner.pan.value = Math.max(-1, Math.min(1, params.pan / 100));
-    }
+      // Voice Panner & Gain Node
+      const panner = ctx.createStereoPanner ? ctx.createStereoPanner() : null;
+      if (panner) {
+        panner.pan.value = Math.max(-1, Math.min(1, params.pan / 100));
+      }
 
-    const voiceGain = ctx.createGain();
-    const vol = (params.volume / 100) * gainFactor;
-    voiceGain.gain.setValueAtTime(vol, startTime);
+      const voiceGain = ctx.createGain();
+      const vol = (params.volume / 100) * gainFactor;
+      voiceGain.gain.setValueAtTime(vol, startTime);
 
-    // Connect voice output
-    if (panner) {
-      voiceGain.connect(panner);
-      panner.connect(this.masterGain);
-    } else {
-      voiceGain.connect(this.masterGain);
-    }
+      // Connect voice output
+      if (panner) {
+        voiceGain.connect(panner);
+        panner.connect(this.masterGain);
+      } else {
+        voiceGain.connect(this.masterGain);
+      }
 
-    // Voice-specific Analog Drive saturator
-    let destNode: AudioNode = voiceGain;
-    if (params.drive > 5) {
-      const voiceDrive = ctx.createWaveShaper();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      voiceDrive.curve = makeDistortionCurve(params.drive * 0.5) as any;
-      voiceDrive.connect(voiceGain);
-      destNode = voiceDrive;
-    }
+      // Voice-specific Analog Drive saturator
+      let destNode: AudioNode = voiceGain;
+      if (params.drive > 5) {
+        const voiceDrive = ctx.createWaveShaper();
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        voiceDrive.curve = makeDistortionCurve(params.drive * 0.5) as any;
+        voiceDrive.connect(voiceGain);
+        destNode = voiceDrive;
+      }
 
-    switch (voiceId) {
-      case 'kick':
-        this.synthKick(destNode, params, startTime);
-        break;
-      case 'snare':
-        this.synthSnare(destNode, params, startTime);
-        break;
-      case 'lowTom':
-        this.synthTom(destNode, params, startTime, 60);
-        break;
-      case 'midTom':
-        this.synthTom(destNode, params, startTime, 110);
-        break;
-      case 'highTom':
-        this.synthTom(destNode, params, startTime, 175);
-        break;
-      case 'rim':
-        this.synthRim(destNode, params, startTime);
-        break;
-      case 'clap':
-        this.synthClap(destNode, params, startTime);
-        break;
-      case 'closedHat':
-        this.synthHat(destNode, params, startTime, false);
-        break;
-      case 'openHat':
-        this.activeOpenHatGain = voiceGain;
-        this.synthHat(destNode, params, startTime, true);
-        break;
-      case 'cowbell':
-        this.synthCowbell(destNode, params, startTime);
-        break;
-      case 'cymbal':
-        this.synthCymbal(destNode, params, startTime);
-        break;
+      switch (voiceId) {
+        case 'kick':
+          this.synthKick(destNode, params, startTime);
+          break;
+        case 'snare':
+          this.synthSnare(destNode, params, startTime);
+          break;
+        case 'lowTom':
+          this.synthTom(destNode, params, startTime, 60);
+          break;
+        case 'midTom':
+          this.synthTom(destNode, params, startTime, 110);
+          break;
+        case 'highTom':
+          this.synthTom(destNode, params, startTime, 175);
+          break;
+        case 'rim':
+          this.synthRim(destNode, params, startTime);
+          break;
+        case 'clap':
+          this.synthClap(destNode, params, startTime);
+          break;
+        case 'closedHat':
+          this.synthHat(destNode, params, startTime, false);
+          break;
+        case 'openHat':
+          this.activeOpenHatGain = voiceGain;
+          this.synthHat(destNode, params, startTime, true);
+          break;
+        case 'cowbell':
+          this.synthCowbell(destNode, params, startTime);
+          break;
+        case 'cymbal':
+          this.synthCymbal(destNode, params, startTime);
+          break;
+      }
+    } catch (err) {
+      console.warn('Synthesize voice error:', err);
     }
   }
 

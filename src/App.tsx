@@ -11,6 +11,8 @@ import {
   DEMO_PATTERNS,
 } from './services/storage';
 
+import { wakeLockService } from './services/wakeLock';
+
 import { Header } from './components/Header';
 import { Oscilloscope } from './components/Visualizer/Oscilloscope';
 import { StepGrid } from './components/Sequencer/StepGrid';
@@ -71,6 +73,25 @@ export function App() {
       scheduler.updatePattern(activePattern, voiceParams, masterFX);
     }
   }, [activePattern, voiceParams, masterFX, isPlaying]);
+
+  // Screen Wake Lock management to prevent mobile display sleep during playback
+  useEffect(() => {
+    if (isPlaying) {
+      wakeLockService.requestLock();
+    } else {
+      wakeLockService.releaseLock();
+    }
+
+    const handleVisibility = () => {
+      wakeLockService.handleVisibilityChange(isPlaying);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      wakeLockService.releaseLock();
+    };
+  }, [isPlaying]);
 
   // Spacebar shortcut for Play/Stop
   useEffect(() => {
