@@ -1,0 +1,40 @@
+# When Vercel finishes a preview of a change, tell the Software Factory its
+# link so the item's Preview button works. Maintained by the Software Factory.
+name: factory-preview
+
+on: deployment_status
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    if: >-
+      github.event.deployment_status.state == 'success' &&
+      !contains(github.event.deployment.environment, 'Production')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Send the preview link to the factory
+        env:
+          FACTORY_URL: ${{ secrets.FACTORY_URL }}
+          FACTORY_API_SECRET: ${{ secrets.FACTORY_API_SECRET }}
+          GH_TOKEN: ${{ github.token }}
+          PREVIEW_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+          SHA: ${{ github.event.deployment.sha }}
+          REF: ${{ github.event.deployment.ref }}
+        run: |
+          if [ -z "$FACTORY_URL" ] || [ -z "$FACTORY_API_SECRET" ]; then
+            echo "FACTORY_URL / FACTORY_API_SECRET not set; skipping."
+            exit 0
+          fi
+          if [[ "$REF" =~ ^[0-9a-f]{40}$ ]]; then
+            branch=$(gh api "repos/$GITHUB_REPOSITORY/commits/$SHA/branches-where-head" \
+              --jq '[.[].name | select(startswith("factory/"))][0] // empty' 2>/dev/null || true)
+            [ -n "$branch" ] && REF="$branch"
+          fi
+          if ! jq -n --arg url "$PREVIEW_URL" --arg sha "$SHA" --arg ref "$REF" '{url: $url, sha: $sha, ref: $ref}' |
+            curl -sS --fail-with-body --retry 2 -X POST "${FACTORY_URL%/}/api/builder/preview" \
+              -H "Authorization: Bearer $FACTORY_API_SECRET" -H "Content-Type: application/json" --data @-; then
+            echo "::warning::Couldn't send the preview link to the factory."
+          fi
